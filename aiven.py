@@ -55,6 +55,7 @@ create_table()
 
 # QR Code Generator
 
+#
 # QR Code Generator
 def generate_qr(ticket_id):
     payload = {
@@ -62,7 +63,6 @@ def generate_qr(ticket_id):
         "exp": datetime.utcnow() + timedelta(days=1)
     }
     token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
-    # Replace localhost with deployed Streamlit URL
     qr_data = f"https://suryaanshqrcodeticketinggit-cqdlltuyahvamg3qwdheze.streamlit.app/?token={token}"
 
     qr = qrcode.make(qr_data)
@@ -85,19 +85,27 @@ if "token" in st.query_params:
 
             if not ticket:
                 st.error("Ticket not found!")
-            elif ticket['status'] == 'entered':
-                st.warning("Ticket already used!")
+            elif ticket['status'] in ['entered', 'entrydenied']:
+                st.warning(f"Ticket already processed. Status: {ticket['status']}")
                 st.markdown(f"**Entry Time:** {ticket['entry_time']}")
             else:
-                cursor.execute("""
-                    UPDATE tickets SET status='entered', entry_time=%s WHERE id=%s
-                """, (datetime.now(), ticket_id))
-                connection.commit()
-                st.success("✅ Ticket validated successfully!")
                 st.markdown(f"**Name:** {ticket['name']}")
                 st.markdown(f"**University:** {ticket['university']}")
                 st.markdown(f"**Event:** {ticket['event_registered_for']}")
-                st.markdown(f"**Time Logged:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+                if st.button("✅ Allow Entry"):
+                    cursor.execute("""
+                        UPDATE tickets SET status='entered', entry_time=%s WHERE id=%s
+                    """, (datetime.now(), ticket_id))
+                    connection.commit()
+                    st.success("Ticket marked as ENTERED ✅")
+
+                if st.button("🚫 Deny Entry"):
+                    cursor.execute("""
+                        UPDATE tickets SET status='entrydenied', entry_time=%s WHERE id=%s
+                    """, (datetime.now(), ticket_id))
+                    connection.commit()
+                    st.error("Ticket marked as ENTRY DENIED ❌")
 
     except jwt.ExpiredSignatureError:
         st.error("⏰ This ticket has expired.")
@@ -142,7 +150,7 @@ else:
                 st.markdown(f"**Mobile:** {t['mobile_number']}")
                 st.markdown(f"**University:** {t['university']}")
                 st.markdown(f"**Event:** {t['event_registered_for']}")
-                st.markdown(f"**Status:** {'✅ Entered' if t['status'] == 'entered' else '❌ Not Entered'}")
+                st.markdown(f"**Status:** {'✅ Entered' if t['status'] == 'entered' else ('❌ Entry Denied' if t['status'] == 'entrydenied' else '🟡 Not Entered')}")
                 st.markdown(f"**Entry Time:** {t['entry_time'] if t['entry_time'] else 'N/A'}")
                 qr_buf, _ = generate_qr(t['id'])
                 st.image(Image.open(qr_buf), caption=f"Ticket ID: {t['id']}")
