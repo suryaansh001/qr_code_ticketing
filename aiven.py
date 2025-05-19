@@ -60,7 +60,8 @@ def generate_qr(ticket_id):
         "exp": datetime.utcnow() + timedelta(days=2)
     }
     token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
-    qr_data = f"http://localhost:8501/?token={token}"
+    qr_data = f"https://suryaanshqrcodeticketinggit-cqdlltuyahvamg3qwdheze.streamlit.app/?token={token}"
+
 
     qr = qrcode.make(qr_data)
     buf = io.BytesIO()
