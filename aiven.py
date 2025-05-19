@@ -54,14 +54,16 @@ def create_table():
 create_table()
 
 # QR Code Generator
+
+# QR Code Generator
 def generate_qr(ticket_id):
     payload = {
         "ticket_id": ticket_id,
-        "exp": datetime.utcnow() + timedelta(days=2)
+        "exp": datetime.utcnow() + timedelta(days=1)
     }
     token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    # Replace localhost with deployed Streamlit URL
     qr_data = f"https://suryaanshqrcodeticketinggit-cqdlltuyahvamg3qwdheze.streamlit.app/?token={token}"
-
 
     qr = qrcode.make(qr_data)
     buf = io.BytesIO()
@@ -69,45 +71,79 @@ def generate_qr(ticket_id):
     buf.seek(0)
     return buf, token
 
-# UI
-st.title("🎟️ QR Code Ticketing System")
+# Token Scanner and Validator
+if "token" in st.query_params:
+    st.header("🔍 Ticket Validation")
+    token = st.query_params["token"]
+    try:
+        decoded = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        ticket_id = decoded["ticket_id"]
 
-menu = st.sidebar.selectbox("Select Role", ["Register Ticket", "Admin View"])
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM tickets WHERE id = %s", (ticket_id,))
+            ticket = cursor.fetchone()
 
-if menu == "Register Ticket":
-    st.header("Register for Event")
-    with st.form("register_form"):
-        name = st.text_input("Name")
-        mobile = st.text_input("Mobile Number")
-        university = st.text_input("University")
-        event = st.text_input("Event Registered For")
-        submitted = st.form_submit_button("Generate Ticket")
-
-        if submitted:
-            with connection.cursor() as cursor:
+            if not ticket:
+                st.error("Ticket not found!")
+            elif ticket['status'] == 'entered':
+                st.warning("Ticket already used!")
+                st.markdown(f"**Entry Time:** {ticket['entry_time']}")
+            else:
                 cursor.execute("""
-                    INSERT INTO tickets (name, mobile_number, university, event_registered_for)
-                    VALUES (%s, %s, %s, %s)
-                """, (name, mobile, university, event))
+                    UPDATE tickets SET status='entered', entry_time=%s WHERE id=%s
+                """, (datetime.now(), ticket_id))
                 connection.commit()
-                ticket_id = cursor.lastrowid
+                st.success("✅ Ticket validated successfully!")
+                st.markdown(f"**Name:** {ticket['name']}")
+                st.markdown(f"**University:** {ticket['university']}")
+                st.markdown(f"**Event:** {ticket['event_registered_for']}")
+                st.markdown(f"**Time Logged:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-            qr_buf, token = generate_qr(ticket_id)
-            st.success("Ticket registered successfully!")
-            st.image(Image.open(qr_buf), caption=f"Ticket ID: {ticket_id}")
+    except jwt.ExpiredSignatureError:
+        st.error("⏰ This ticket has expired.")
+    except jwt.InvalidTokenError:
+        st.error("❌ Invalid token.")
 
-elif menu == "Admin View":
-    st.header("Admin - View All Tickets")
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT * FROM tickets")
-        tickets = cursor.fetchall()
-        for t in tickets:
-            st.markdown(f"**Name:** {t['name']}")
-            st.markdown(f"**Mobile:** {t['mobile_number']}")
-            st.markdown(f"**University:** {t['university']}")
-            st.markdown(f"**Event:** {t['event_registered_for']}")
-            st.markdown(f"**Status:** {'✅ Entered' if t['status'] == 'entered' else '❌ Not Entered'}")
-            st.markdown(f"**Entry Time:** {t['entry_time'] if t['entry_time'] else 'N/A'}")
-            qr_buf, _ = generate_qr(t['id'])
-            st.image(Image.open(qr_buf), caption=f"Ticket ID: {t['id']}")
-            st.markdown("---")
+else:
+    # UI
+    st.title("🎟️ QR Code Ticketing System")
+
+    menu = st.sidebar.selectbox("Select Role", ["Register Ticket", "Admin View"])
+
+    if menu == "Register Ticket":
+        st.header("Register for Event")
+        with st.form("register_form"):
+            name = st.text_input("Name")
+            mobile = st.text_input("Mobile Number")
+            university = st.text_input("University")
+            event = st.text_input("Event Registered For")
+            submitted = st.form_submit_button("Generate Ticket")
+
+            if submitted:
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO tickets (name, mobile_number, university, event_registered_for)
+                        VALUES (%s, %s, %s, %s)
+                    """, (name, mobile, university, event))
+                    connection.commit()
+                    ticket_id = cursor.lastrowid
+
+                qr_buf, token = generate_qr(ticket_id)
+                st.success("Ticket registered successfully!")
+                st.image(Image.open(qr_buf), caption=f"Ticket ID: {ticket_id}")
+
+    elif menu == "Admin View":
+        st.header("Admin - View All Tickets")
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM tickets")
+            tickets = cursor.fetchall()
+            for t in tickets:
+                st.markdown(f"**Name:** {t['name']}")
+                st.markdown(f"**Mobile:** {t['mobile_number']}")
+                st.markdown(f"**University:** {t['university']}")
+                st.markdown(f"**Event:** {t['event_registered_for']}")
+                st.markdown(f"**Status:** {'✅ Entered' if t['status'] == 'entered' else '❌ Not Entered'}")
+                st.markdown(f"**Entry Time:** {t['entry_time'] if t['entry_time'] else 'N/A'}")
+                qr_buf, _ = generate_qr(t['id'])
+                st.image(Image.open(qr_buf), caption=f"Ticket ID: {t['id']}")
+                st.markdown("---")
