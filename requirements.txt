@@ -1,0 +1,6 @@
+streamlit
+qrcode
+PyJWT
+pillow
+pymysql
+python-dotenv
