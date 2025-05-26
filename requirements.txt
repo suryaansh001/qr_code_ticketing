@@ -4,3 +4,4 @@ PyJWT
 pillow
 pymysql
 python-dotenv
+cryptography
